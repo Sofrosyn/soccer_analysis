@@ -51,6 +51,28 @@ python detect.py --weights yolov5s.pt --source 0                               #
 </details>
 
 ## How to run
+### Run on Flask
+```bash
+python app.py
+```
+By using API endpoint, it can process live streaming and convert panorama video into normal tracking video.
+Example:
+```bash
+http://127.0.0.1:8000/video?source=rtmp://stream.wow-sports.com/wow/wow?auth_key=1706097000-0-0-13d1bb6ec74d390e6eea42941bb64bfb&weights=yolov5_class3_300.pt&team1=AA&team2=BB&id=current
+```
+| Argument | Description | Default value |
+| ----------- | ----------- | ----------- |
+| URL | basic endpoint| http://127.0.0.1:8000/video|
+| source | local video or live streaming url | 1.mp4 |
+| weights | path of trained model | models/yolov5s_class3_300_25k.pt |
+| team1 | left team | AA |
+| team2 | right team | BB |
+| id | index | current|
+
+
+### Run on local
+
+
 To run one of the applications (possession computation and passes counter) you need to use flags in the console.
 
 These flags are defined in the following table:
