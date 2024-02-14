@@ -34,7 +34,7 @@ data/images/*
 !data/images/zidane.jpg
 !data/images/bus.jpg
 !data/*.sh
-
+!images/*.png
 results*.csv
 
 # Datasets -------------------------------------------------------------------------------------------------------------
