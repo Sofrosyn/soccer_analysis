@@ -7,7 +7,7 @@ chelsea_filter = {
 
 city_filter = {
     "name": "Man City",
-    "colors": [sky_blue],
+    "colors": [white, black],
 }
 
 

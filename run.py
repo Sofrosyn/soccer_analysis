@@ -54,7 +54,7 @@ object_detector = YoloV5(model_path=args.model)
 hsv_classifier = HSVClassifier(filters=filters)
 
 # Add inertia to classifier
-classifier = InertiaClassifier(classifier=hsv_classifier, inertia=20)
+classifier = InertiaClassifier(classifier=hsv_classifier, inertia=50)
 
 # Teams and Match
 chelsea = Team(

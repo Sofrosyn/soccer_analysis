@@ -86,7 +86,7 @@ def get_ball_player_detections(
     person_df = object_df[object_df["name"] == "player"]
     person_df = person_df[person_df["confidence"] > 0.35]
     ball_df = object_df[object_df["name"] == "ball"]
-    ball_df = ball_df[ball_df["confidence"] > 0.3]
+    ball_df = ball_df[ball_df["confidence"] > 0.01]
     person_detections = Converter.DataFrame_to_Detections(person_df)
     ball_detections = Converter.DataFrame_to_Detections(ball_df)
     return person_detections, ball_detections
