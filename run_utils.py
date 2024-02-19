@@ -87,9 +87,10 @@ def get_ball_player_detections(
     person_df = person_df[person_df["confidence"] > 0.35]
     ball_df = object_df[object_df["name"] == "ball"]
     ball_df = ball_df[ball_df["confidence"] > 0.01]
+    
     person_detections = Converter.DataFrame_to_Detections(person_df)
     ball_detections = Converter.DataFrame_to_Detections(ball_df)
-    return person_detections, ball_detections
+    return person_detections, ball_detections, ball_df
 
 
 def create_mask(frame: np.ndarray, detections: List[norfair.Detection]) -> np.ndarray:
@@ -120,6 +121,7 @@ def create_mask(frame: np.ndarray, detections: List[norfair.Detection]) -> np.nd
     mask[69:200, 160:510] = 0
 
     return mask
+
 
 
 def apply_mask(img: np.ndarray, mask: np.ndarray) -> np.ndarray:
