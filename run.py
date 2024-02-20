@@ -59,14 +59,14 @@ classifier = InertiaClassifier(classifier=hsv_classifier, inertia=50)
 # Teams and Match
 chelsea = Team(
     name="Chelsea",
-    abbreviation="AAA",
+    abbreviation="RED",
     color=(0, 0, 255),
     board_color=(244, 86, 64),
     text_color=(255, 255, 255),
 )
 man_city = Team(
     name="Man City", 
-    abbreviation="BBB", 
+    abbreviation="WHITE", 
     color=(250, 250, 250))
 teams = [chelsea, man_city]
 match = Match(home=chelsea, away=man_city, fps=fps)
