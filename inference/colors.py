@@ -10,6 +10,13 @@ red = {
     "upper_hsv": (8, 255, 255),
 }
 
+deep_red = {
+    "name": "deep_red",
+    "lower_hsv": (160, 100, 20),
+    "upper_hsv": (179, 255, 255),
+}
+
+
 blueish_red = {
     "name": "blueish_red",
     "lower_hsv": (170, 0, 0),
@@ -52,4 +59,4 @@ black = {
     "upper_hsv": (179, 255, 49),
 }
 
-all = [white, red, orange, yellow, green, sky_blue, blue, blueish_red, black]
+all = [white, red, orange, yellow, green, sky_blue, blue, blueish_red, black, deep_red]

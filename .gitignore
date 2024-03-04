@@ -257,3 +257,5 @@ crashlytics-build.properties
 fabric.properties
 
 .github/*
+detect_output.txt
+non_output.txt
