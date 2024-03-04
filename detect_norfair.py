@@ -7,8 +7,8 @@ import torch
 import norfair
 from norfair import Detection, Paths, Tracker, Video
 
-DISTANCE_THRESHOLD_BBOX: float = 0.7
-DISTANCE_THRESHOLD_CENTROID: int = 30
+DISTANCE_THRESHOLD_BBOX: float = 0.5
+DISTANCE_THRESHOLD_CENTROID: int = 20
 MAX_DISTANCE: int = 10000
 
 

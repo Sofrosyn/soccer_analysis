@@ -1,5 +1,4 @@
 import argparse
-
 import cv2
 import numpy as np
 import PIL
@@ -47,14 +46,10 @@ args = parser.parse_args()
 video = Video(input_path=args.video)
 fps = video.video_capture.get(cv2.CAP_PROP_FPS)
 
-# Object Detectors
-# player_detector = YoloV5(model_path ="yolov5s_class3_400_25k.pt")
-# ball_detector = YoloV5(model_path=args.model)
-object_detector = YoloV5(model_path=args.model)
 
+object_detector = YoloV5(model_path=args.model)
 # HSV Classifier
 hsv_classifier = HSVClassifier(filters=filters)
-
 # Add inertia to classifier
 classifier = InertiaClassifier(classifier=hsv_classifier, inertia=50)
 
@@ -84,7 +79,7 @@ player_tracker = Tracker(
 
 ball_tracker = Tracker(
     distance_function=mean_euclidean,
-    distance_threshold=250,
+    distance_threshold=20,
     initialization_delay=3,
     hit_counter_max=2000,
 )
@@ -101,7 +96,7 @@ passes_background = match.get_passes_background()
 ret, frame = video.video_capture.read()
 
 
-########################################### CROP #############################################
+############################################# CROP #############################################
 
 ball_bbox = [2300, 338, 2323, 361]
 res_width = 1280
@@ -113,20 +108,13 @@ lastCoords = [box_left, box_top, box_right, box_bottom]
 lastBoxCoords = lastCoords
 box_width = box_right-box_left
 box_height = box_bottom-box_top
-fps = 20 
+fps = 24
 
-# vid_writer = cv2.VideoWriter(f"{id}_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
-# ### ==== other resolution 
-# res_width_2 = 320
-# res_height_2 = 180
-# wd_2, ht_2 = res_width_2, res_height_2
-# vid_writer_2 = cv2.VideoWriter(f"{id}_low.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width_2, res_height_2))
-
-acc_num = 27
+acc_num = 25
 temp_x_vel = 0    
 temp_y_vel = 0
-l_val = -800
-h_val = 800
+l_val = -500
+h_val = 500
 pre_center_x = 0
 pre_center_y = 0
 ht_rate = 0
@@ -144,19 +132,18 @@ k2 = 0.01  # radial distortion coefficient
 p1 = 0.001  # tangential distortion coefficient
 p2 = -0.002  # tangential distortion coefficient
 k3 = 0.00001  # radial distortion coefficient
+prev_center_x = 0
+prev_center_y = 0
+center_x = 0
+center_y = 0
 
-
+vid_writer = cv2.VideoWriter("2.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
 vid_h, vid_w, _ = frame.shape
 
+
 while ret:
-
-    # Get Detections
-    # players_detections = get_player_detections(player_detector, frame)
-    # ball_detections = get_ball_detections(ball_detector, frame)
-    players_detections, ball_detections, ball_value = get_ball_player_detections(object_detector, frame)
-
+    players_detections, ball_detections, players_value, ball_value = get_ball_player_detections(object_detector, frame)
     detections = ball_detections + players_detections
-
     # Update trackers
     coord_transformations = update_motion_estimator(
         motion_estimator=motion_estimator,
@@ -174,7 +161,6 @@ while ret:
 
     player_detections = Converter.TrackedObjects_to_Detections(player_track_objects)
     ball_detections = Converter.TrackedObjects_to_Detections(ball_track_objects)
-
     player_detections = classifier.predict_from_detections(
         detections=player_detections,
         img=frame,
@@ -183,76 +169,92 @@ while ret:
     ball = get_main_ball(ball_detections)
     players = Player.from_detections(detections=players_detections, teams=teams)
     
-
-    # # Draw
-    # frame = PIL.Image.fromarray(frame)  
-
-    # if args.possession:
-
-    #     frame = Player.draw_players(
-    #         players=players, frame=frame, confidence=False, id=True
-    #     )
-
-    #     frame = path.draw(
-    #         img=frame,
-    #         detection=ball.detection,
-    #         coord_transformations=coord_transformations,
-    #         color=match.team_possession.color,
-    #     )
-
-    #     frame = match.draw_possession_counter(
-    #         frame, counter_background=possession_background, debug=False
-    #     )
-
-    #     if ball:
-    #         frame = ball.draw(frame)
-
-    # if args.passes:
-    #     pass_list = match.passes
-
-    #     frame = Pass.draw_pass_list(
-    #         img=frame, passes=pass_list, coord_transformations=coord_transformations
-    #     )
-
-    #     frame = match.draw_passes_counter(
-    #         frame, counter_background=passes_background, debug=False
-    #     )
-
-    # frame = np.array(frame)
-    # # Write video
-
-    # video.write(frame)
     if len(ball_value) > 0:
+
         try:
             left, top, right, bottom, confidence = ball_value.xmin, ball_value.ymin, ball_value.xmax, ball_value.ymax, ball_value.confidence
             left, top, right, bottom = int(left), int(top), int(right), int(bottom)
         except:
-
             high_ball = ball_value.sort_values(by='confidence', ascending=False).iloc[0]
             left, top, right, bottom, confidence = high_ball.xmin, high_ball.ymin, high_ball.xmax, high_ball.ymax, high_ball.confidence
             left, top, right, bottom = int(left), int(top), int(right), int(bottom)
-            
-
+        
         temp_bbox = [left, top, right, bottom]
         [pre_center_x, pre_center_y] = boxCenter(ball_bbox)
         [cur_center_x, cur_center_y] = boxCenter(temp_bbox)
         ball_ht = bottom - top
-        point1 = (pre_center_x, pre_center_y)    
+        point1 = (pre_center_x, pre_center_y)
         point2 = (cur_center_x, cur_center_y)
         dis_val = euclidean_distance(point1, point2)
         ball_bbox = temp_bbox
         limit_ht = math.ceil(vid_h * 0.85 + 0.5) 
         ht_rate = ((limit_ht  - ((ball_ht / 20) - 1) * 54) - ht) / acc_num
+
+        if len(players_value) > 0:
+            # Iterate over each player
+            for i in range(len(players_value)):
+                # Extract coordinates and confidence for each player
+                left, top, right, bottom, confidence = players_value.iloc[i].xmin, players_value.iloc[i].ymin, players_value.iloc[i].xmax, players_value.iloc[i].ymax, players_value.iloc[i].confidence
+
+                # Calculate current center positions
+                center_x += (left + right) // 2
+                center_y += (top + bottom) // 2
+
+            # Calculate average center positions
+            center_x /= len(players_value)
+            center_y /= len(players_value)
+
+        # Predict ball position considering previous and current player positions
+        ball_prediction_x = 2 * center_x - prev_center_x
+        ball_prediction_y = 2 * center_y - prev_center_y
+
+        # Update previous center positions
+        prev_center_x = center_x
+        prev_center_y = center_y
+
+    else:
         
-  
-  
+        if len(players_value) > 0:
+            # Iterate over each player
+            for i in range(len(players_value)):
+                # Extract coordinates and confidence for each player
+                left, top, right, bottom, confidence = players_value.iloc[i].xmin, players_value.iloc[i].ymin, players_value.iloc[i].xmax, players_value.iloc[i].ymax, players_value.iloc[i].confidence
+
+                # Calculate current center positions
+                center_x += (left + right) // 2
+                center_y += (top + bottom) // 2
+
+            # Calculate average center positions
+            center_x /= len(players_value)
+            center_y /= len(players_value)
+
+        # Predict ball position considering previous and current player positions
+        ball_prediction_x = 2 * center_x - prev_center_x
+        ball_prediction_y = 2 * center_y - prev_center_y
+
+        # Update previous center positions
+        prev_center_x = center_x
+        prev_center_y = center_y
+
+        print("predicted+++++++++++++++++++++++++")
+        
+        temp_bbox = [prev_center_x - 15, prev_center_y - 15, prev_center_x + 15, prev_center_y + 15]
+        [pre_center_x, pre_center_y] = boxCenter(ball_bbox)
+        [cur_center_x, cur_center_y] = boxCenter(temp_bbox)
+        ball_ht = bottom - top
+        point1 = (pre_center_x, pre_center_y)
+        point2 = (cur_center_x, cur_center_y)
+        dis_val = euclidean_distance(point1, point2)
+
+        ball_bbox = temp_bbox
+        limit_ht = math.ceil(vid_h * 0.85 + 0.5) 
+        ht_rate = ((limit_ht  - ((ball_ht / 20) - 1) * 54) - ht) / acc_num
 
     
-    newCoords = adjustBoxSize(ball_bbox, box_width, box_height) 
-    newCoords = adjustBoundaries(newCoords,[vid_w, vid_h]) 
+    newCoords = adjustBoxSize(ball_bbox, box_width, box_height)
+    newCoords = adjustBoundaries(newCoords,[vid_w, vid_h])
     
     [box_left, box_top, box_right, box_bottom] = newCoords
-
     [cur_center_x, cur_center_y] = boxCenter(newCoords)
     [pre_center_x, pre_center_y] = boxCenter(lastBoxCoords)
     
@@ -276,55 +278,46 @@ while ret:
         # temp_x_vel, temp_y_vel = 0, 0
         acc_flg = 0
     
-
     lastBoxCoords = newCoords  
-
-
     ln = len(res_points)
     print(res_points[ln - 1], "--ball---")
 
     frame_num += 1
-    
     for res_point in res_points:
         try:
             ret, frame = video.video_capture.read()
+            center_x, center_y = res_point
+            angle = calculate_angle(center_x, center_y, vid_w, vid_h)
+            undistorted_img = screen_processing(frame, center_x, center_y, wd, ht, angle, vid_w, vid_h, res_width, res_height, fx, fy, cx, cy, k1, k2, p1, p2, k3)
         except: 
             break
-
-        
-        
-        center_x, center_y = res_point
-        angle = calculate_angle(center_x, center_y, vid_w, vid_h)
-        undistorted_img = screen_processing(frame, center_x, center_y, wd, ht, angle, vid_w, vid_h, res_width, res_height, fx, fy, cx, cy, k1, k2, p1, p2, k3)
-        
         opencv_image_rgb = cv2.cvtColor(undistorted_img, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(opencv_image_rgb)
-
+        
         if args.possession:
-
-            
 
             pil_image = match.draw_possession_counter(
                 pil_image, counter_background=possession_background, debug=False
             )
 
-            
+        if args.passes:
 
+            pass_list = match.passes
+            pil_image = Pass.draw_pass_list(
+                img=pil_image, passes=pass_list, coord_transformations=coord_transformations
+            )
+            pil_image = match.draw_passes_counter(
+                pil_image, counter_background=passes_background, debug=False
+            )
 
         pil_image_array = np.array(pil_image)
-
-    
         final_frame = cv2.cvtColor(pil_image_array, cv2.COLOR_RGB2BGR)
         cv2.namedWindow("result", 0)
         cv2.imshow("result", final_frame)
-
-        # undistorted_img_2 = screen_processing(im0, center_x, center_y, wd_2, ht_2, angle, vid_w, vid_h, res_width_2, res_height_2, fx, fy, cx, cy, k1, k2, p1, p2, k3)
-        # vid_writer.write(undistorted_img)
-        # vid_writer_2.write(undistorted_img_2)
+        vid_writer.write(final_frame)
+        match.update(players, ball)
         cv2.waitKey(1)  # Check for key press every 1ms
-    #         _, buffer = cv2.imencode('.jpg', undistorted_img)
-    #         decoded_img = buffer.tobytes()
-    #         yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + decoded_img + b'\r\n')
-    print("########################< END >########################")
+    
     ret, frame = video.video_capture.read()
-    match.update(players, ball)
+    
+print("########################< END >########################")

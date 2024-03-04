@@ -90,7 +90,7 @@ def get_ball_player_detections(
     
     person_detections = Converter.DataFrame_to_Detections(person_df)
     ball_detections = Converter.DataFrame_to_Detections(ball_df)
-    return person_detections, ball_detections, ball_df
+    return person_detections, ball_detections, person_df, ball_df
 
 
 def create_mask(frame: np.ndarray, detections: List[norfair.Detection]) -> np.ndarray:
