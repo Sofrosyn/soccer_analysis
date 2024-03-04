@@ -76,14 +76,14 @@ match.team_possession = man_city
 player_tracker = Tracker(
     distance_function=mean_euclidean,
     distance_threshold=250,
-    initialization_delay=3,
+    initialization_delay=5,
     hit_counter_max=90,
 )
 
 ball_tracker = Tracker(
     distance_function=mean_euclidean,
-    distance_threshold=250,
-    initialization_delay=3,
+    distance_threshold=100,
+    initialization_delay=10,
     hit_counter_max=2000,
 )
 motion_estimator = MotionEstimator()
@@ -97,6 +97,8 @@ possession_background = match.get_possession_background()
 passes_background = match.get_passes_background()
 
 for i, frame in enumerate(video):
+    print("frame======>", len(frame))
+    print("frame type ======>", type(frame))
 
     # Get Detections
     # players_detections = get_player_detections(player_detector, frame)

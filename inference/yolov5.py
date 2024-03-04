@@ -25,6 +25,8 @@ class YoloV5(BaseDetector):
 
         if model_path:
             self.model = torch.hub.load("ultralytics/yolov5", "custom", path=model_path)
+
+            print("it is loaded successfully!")
         else:
             self.model = torch.hub.load(
                 "ultralytics/yolov5", "yolov5x", pretrained=True
@@ -45,5 +47,11 @@ class YoloV5(BaseDetector):
         """
 
         result = self.model(input_image, size=640)
+        print("object_detector***************+", result)
+        print("object_detector*******type********+", type(result), len(result))
+        # Writing the output to a text file
+        with open("non_output.txt", "a") as file:
+            file.write("\n object_detector***************+\n")
+            file.write(str(result.xyxy[0]))
 
         return result.pandas().xyxy[0]

@@ -173,6 +173,12 @@ def run(
                     writer.writeheader()
                 writer.writerow(data)
 
+        print("pred len===========>", len(pred))
+        print("pred len===========>", pred)
+        with open("detect_output.txt", "a") as file:
+            file.write("\n pred***************+\n")
+            file.write(str(pred))
+        
         # Process predictions
         for i, det in enumerate(pred):  # per image
             seen += 1
@@ -191,8 +197,10 @@ def run(
             annotator = Annotator(im0, line_width=line_thickness, example=str(names))
             if len(det):
                 # Rescale boxes from img_size to im0 size
-                det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()
+                print("det[:, :4] old ==================>", det[:, :4] )
 
+                det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()
+                print("det[:, :4] ==================>", det[:, :4] )
                 # Print results
                 for c in det[:, 5].unique():
                     n = (det[:, 5] == c).sum()  # detections per class

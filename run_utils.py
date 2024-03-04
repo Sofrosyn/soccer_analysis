@@ -83,6 +83,9 @@ def get_ball_player_detections(
         List of player detections
     """
     object_df = object_detector.predict(frame)
+    
+
+
     person_df = object_df[object_df["name"] == "player"]
     person_df = person_df[person_df["confidence"] > 0.35]
     ball_df = object_df[object_df["name"] == "ball"]
