@@ -13,6 +13,11 @@ def create_player_map(image_list):
     cell_width = 144  # Adjust as per your image size
     cell_height = 256  # Adjust as per your image size
 
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 2
+    font_thickness = 3
+    font_color = (0, 0, 255)
+
     # Create a blank canvas for the image map
     image_map = np.zeros((rows * cell_height, cols * cell_width, 3), dtype=np.uint8)
 
@@ -21,6 +26,11 @@ def create_player_map(image_list):
         for j in range(cols):
             # Read the image
             image = image_list[i * cols + j]
+            if i * cols + j + 1 < 10:
+
+                cv2.putText(image, str(i * cols + j + 1), (56, 214), font, font_scale, font_color, font_thickness, cv2.LINE_AA)
+            else:
+                cv2.putText(image, str(i * cols + j + 1), (28, 214), font, font_scale, font_color, font_thickness, cv2.LINE_AA)
             # Resize the image to fit the cell dimensions
             
 

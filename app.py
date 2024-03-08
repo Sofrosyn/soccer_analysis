@@ -122,14 +122,22 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
     vid_writer = cv2.VideoWriter(f"videos/{id}_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
     vid_h, vid_w, _ = frame.shape
     full_writer = cv2.VideoWriter(f"videos/{id}_full.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (vid_w, vid_h))
+    
+    players_list = []
+
     if crop_basis == 0:
         full_writer.write(frame)
+        
+        for _ in range(25):
+            tile_img = 255 * np.ones((256,144,3), np.uint8)
+            players_list.append(tile_img)
+
 
     ####################################  Auxiliary Variable ####################################
     frame_num = 0
     stream_num = 1
-
     
+    map_count = 0
     
     while ret:
         players_detections, ball_detections, players_value, ball_value = get_ball_player_detections(object_detector, frame)
@@ -165,24 +173,25 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
         players_ln = len(players)
 
         ############################################################### CROP PLAYERS MAP ###############################################################
-        if crop_basis == 0 and stream_num == 2:
-            players_list = []
-
-            for _ in range(25):
-                tile_img = 255 * np.ones((256,144,3), np.uint8)
-                players_list.append(tile_img)
-
+        if crop_basis == 0:
+        
             for player in players:
                 try:
                     player_id = player.detection.data["id"]
+                    if np.sum(np.all(players_list[player_id - 1] == [255, 255, 255], axis=2)) != 36864:
+                        continue
                     pxmin, pymin, pxmax, pymax = player.detection.points[0][0], player.detection.points[0][1], player.detection.points[1][0], player.detection.points[1][1]
                     tmp_img = frame[pymin:pymax, pxmin:pxmax]
                     tmp_img = cv2.resize(tmp_img, (144, 256))
                     players_list[player_id - 1] = tmp_img
+                    
                 except:
                     continue
-            player_map_img = create_player_map(players_list)
-            cv2.imwrite(f"{id}.png", player_map_img)
+
+            
+
+                
+                
 
         ############################################################### INERTIA ###############################################################
         
@@ -375,6 +384,10 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
             except:
                 vid_writer.release()
                 convert_mp4_to_hls(f"./videos/{id}_out.mp4", f"{id}{stream_num}")
+                if crop_basis == 0:
+                    player_map_img = create_player_map(players_list)
+                    cv2.imwrite(f"{id}.png", player_map_img)
+
                 break
             opencv_image_rgb = cv2.cvtColor(undistorted_img, cv2.COLOR_BGR2RGB)
             pil_image = Image.fromarray(opencv_image_rgb)
@@ -418,6 +431,11 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
         except:
             vid_writer.release()
             convert_mp4_to_hls(f"./videos/{id}_out.mp4", f"{id}{stream_num}")
+            if crop_basis == 0:
+                player_map_img = create_player_map(players_list)
+                cv2.imwrite(f"{id}.png", player_map_img)
+
+
         if crop_basis == 0:
             full_writer.write(frame)
         
