@@ -200,7 +200,7 @@ def get_main_ball(detections: List[Detection], match: Match = None) -> Ball:
 
     if detections:
         ball.detection = detections[0]
-        print("detections[0]==========================>", detections[0])
-    print("detections==========================>", detections)
-    print("ball==========================>", ball)
+    #     print("detections[0]==========================>", detections[0])
+    # print("detections==========================>", detections)
+    # print("ball==========================>", ball)
     return ball

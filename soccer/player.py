@@ -301,5 +301,6 @@ class Player:
             player = Player(detection=detection)
 
             players.append(player)
+            
 
         return players
