@@ -1,0 +1,16 @@
+Nor
+Nor
+Acc
+Acc
+DEC
+Nor
+Acc
+Acc
+Acc
+Acc
+Acc
+Acc
+Acc
+Acc
+Nor
+Acc

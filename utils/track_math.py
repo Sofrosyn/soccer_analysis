@@ -11,9 +11,12 @@ def calculate_centroid(detections):
         return [int(centroid[0]), int(centroid[1])]
     return None
 
-def interpolate_points_uniform_acceleration(point1, point2, ini_x_vel, ini_y_vel, n):
+def interpolate_points_uniform_acceleration(point1, point2, ini_x_vel, ini_y_vel, n, wd, ht):
     x1, y1 = point1
     x2, y2 = point2
+    x1, y1 = max(0, min(x1, wd)), max(0, min(y1, ht))
+    x2, y2 = max(0, min(x2, wd)), max(0, min(y2, ht))
+
     ini_x_vel = 0
     ini_y_vel = 0
     
@@ -33,30 +36,36 @@ def interpolate_points_uniform_acceleration(point1, point2, ini_x_vel, ini_y_vel
 
     return interpolated_points, x_vel, y_vel
 
-def interpolate_points_uniform_deceleration(point1, point2, ini_x_vel, ini_y_vel, n):
+def interpolate_points_uniform_deceleration(point1, point2, initial_x_velocity, initial_y_velocity, num_points, width, height):
     x1, y1 = point1
     x2, y2 = point2
-    
+    x1, y1 = max(0, min(point1[0], width)), max(0, min(point1[1], height))
+    x2, y2 = max(0, min(point2[0], width)), max(0, min(point2[1], height))
+
     interpolated_points = []
-    x_deceleration = 2 * (ini_x_vel * n - x2 + x1) / n**2
-    y_deceleration = 2 * (ini_y_vel * n - y2 + y1)/ n**2
-    for i in range(1, n + 1):
-        tm = i  # Assuming each unit of tm is 1 second
-        x = x1  + ini_x_vel * tm - 0.5 * x_deceleration * tm**2
-        y = y1  + ini_y_vel * tm - 0.5 * y_deceleration * tm**2
     
+    x_deceleration = 2 * (initial_x_velocity * num_points - x2 + x1) / num_points**2
+    y_deceleration = 2 * (initial_y_velocity * num_points - y2 + y1) / num_points**2
+    
+    for t in range(1, num_points):
+        x = x1 + initial_x_velocity * t - 0.5 * x_deceleration * t**2
+        y = y1 + initial_y_velocity * t - 0.5 * y_deceleration * t**2
         interpolated_points.append((x, y))
-
-
-    x_vel = ini_x_vel - x_deceleration * tm
-    y_vel = ini_y_vel - y_deceleration * tm
-
-    return interpolated_points, x_vel, y_vel
-
-def interpolate_points(point1, point2, n):
     
+    final_x_velocity = initial_x_velocity - x_deceleration * num_points
+    final_y_velocity = initial_y_velocity - y_deceleration * num_points
+
+    return interpolated_points, final_x_velocity, final_y_velocity
+
+
+
+def interpolate_points(point1, point2, n, wd, ht):
+     
     x1, y1 = point1
     x2, y2 = point2
+    x1, y1 = max(0, min(x1, wd)), max(0, min(y1, ht))
+    x2, y2 = max(0, min(x2, wd)), max(0, min(y2, ht))
+    
 
     
     interpolated_points = []
@@ -71,6 +80,32 @@ def interpolate_points(point1, point2, n):
     y_vel = (y2 - y1) / n
 
     return interpolated_points, x_vel, y_vel
+
+def interpolate_log_points(point1, point2, n):
+     
+    x1, y1 = point1
+    x2, y2 = point2
+        
+    interpolated_points = []
+    
+    x_start = x1
+    x_stop = x2
+    x_intervals = np.logspace(np.log10(x_start), np.log10(x_stop), num=n)
+
+    y_start = y1
+    y_stop = y2
+    y_intervals = np.logspace(np.log10(y_start), np.log10(y_stop), num=n)
+
+
+    for i in range(len(x_intervals)):
+        x = x_intervals[i]
+        y = y_intervals[i]
+        interpolated_points.append((x, y))
+
+    return interpolated_points
+
+
+
 
 def create_polygon_vertices(center_x, center_y, width, height, angle): # Generate polygon vertices based on center point and angle
     # Calculate the rectangle vertices
@@ -202,3 +237,31 @@ def screen_processing(im0, center_x, center_y, wd, ht, angle, vid_w, vid_h, res_
 
 
     return undistorted_img
+
+
+
+
+def predict_next_position(last_positions):
+    # Assuming last_positions is a numpy array of shape (n, 2) where n is the number of previous positions
+    # Each row represents a (x, y) coordinate of the ball
+    
+    if len(last_positions) < 2:
+        return None  # Not enough data to predict
+    
+
+    
+    direction_vector = [0, 0]
+    predicted_position = [0, 0]
+    # Extract the last known position and the position before that
+    last_known_position = last_positions[-1]
+    previous_position = last_positions[-2]
+    
+    # Calculate the direction vector from the previous position to the last known position
+    direction_vector[0] = last_known_position[0] - previous_position[0]
+    direction_vector[1] = last_known_position[1] - previous_position[1]
+    
+    # Assuming constant velocity, extrapolate the next position by adding the direction vector to the last known position
+    predicted_position[0] = last_known_position[0] + direction_vector[0]
+    predicted_position[1] = last_known_position[1] + direction_vector[1] 
+    
+    return predicted_position

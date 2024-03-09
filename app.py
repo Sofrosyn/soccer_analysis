@@ -1,131 +1,110 @@
-import argparse
-import csv
-import os
-import platform
-import sys
-from pathlib import Path
-import math
-import torch
+import cv2
 import numpy as np
+import PIL
+from norfair import Tracker, Video
+from norfair.camera_motion import MotionEstimator
+from norfair.distances import mean_euclidean
+from PIL import Image
+from collections import deque
 from flask import Flask, Response, request
 
-
-
+from inference import Converter, HSVClassifier, InertiaClassifier, YoloV5
+from inference.filters import filters
+from run_utils import (
+    get_ball_detections,
+    get_main_ball,
+    get_player_detections,
+    get_ball_player_detections,
+    update_motion_estimator,
+)
+from soccer import Match, Player, Team
+from soccer.draw import AbsolutePath
+from soccer.pass_event import Pass
+from utils.track_math import *
+from utils.stream_output import *
+from utils.playermap import *
 
 app = Flask(__name__)
 
-FILE = Path(__file__).resolve()
-ROOT = FILE.parents[0]  # YOLOv5 root directory
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))  # add ROOT to PATH
-ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
+def generate_frames(video_path, model_path, enable_pass_detection, enable_possession_counter, id, team1, team2, crop_basis):
+   
 
-from models.common import DetectMultiBackend
-from utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadScreenshots, LoadStreams
-from utils.general import (
-    LOGGER,
-    Profile,
-    check_file,
-    check_img_size,
-    check_imshow,
-    check_requirements,
-    colorstr,
-    cv2,
-    increment_path,
-    non_max_suppression,
-    print_args,
-    scale_boxes,
-    strip_optimizer,
-    xyxy2xywh,
+    video = Video(input_path=video_path)
+    fps = video.video_capture.get(cv2.CAP_PROP_FPS)
 
-)
-from utils.torch_utils import select_device, smart_inference_mode
-from utils.track_math import *
+    object_detector = YoloV5(model_path=model_path)
+    hsv_classifier = HSVClassifier(filters=filters)
+    classifier = InertiaClassifier(classifier=hsv_classifier, inertia=50)
 
-def detect_object(path, im, im0s, dt, model, save_dir, augment, conf_thres, iou_thres, classes, agnostic_nms, max_det, visualize):
+    team_one = Team(
+        name=team1,
+        abbreviation="RED",
+        color=(0, 0, 255),
+        board_color=(244, 86, 64),
+        text_color=(255, 255, 255),
+    )
+    team_two = Team(
+        name=team2, 
+        abbreviation="WHITE", 
+        color=(250, 250, 250))
+    teams = [team_one, team_two]
+    match = Match(home=team_one, away=team_two, fps=fps)
+    match.team_possession = team_one
 
-    with dt[0]:
-        im = torch.from_numpy(im).to(model.device)
-        im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
-        im /= 255  # 0 - 255 to 0.0 - 1.0
-        if len(im.shape) == 3:
-            im = im[None]  # expand for batch dim
-        if model.xml and im.shape[0] > 1:
-            ims = torch.chunk(im, im.shape[0], 0)
+    player_tracker = Tracker(
+        distance_function=mean_euclidean,
+        distance_threshold=250,
+        initialization_delay=3,
+        hit_counter_max=90,
+    )
 
-    # Inference
-    with dt[1]:
-        visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
-        if model.xml and im.shape[0] > 1:
-            pred = None
-            for image in ims:
-                if pred is None:
-                    pred = model(image, augment=augment, visualize=visualize).unsqueeze(0)
-                else:
-                    pred = torch.cat((pred, model(image, augment=augment, visualize=visualize).unsqueeze(0)), dim=0)
-            pred = [pred, None]
-        else:
-            pred = model(im, augment=augment, visualize=visualize)
-    # NMS
-    with dt[2]:
-        pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
+    ball_tracker = Tracker(
+        distance_function=mean_euclidean,
+        distance_threshold=20,
+        initialization_delay=3,
+        hit_counter_max=2000,
+    )
+    motion_estimator = MotionEstimator()
+    coord_transformations = None
 
+    possession_background = match.get_possession_background()
+    passes_background = match.get_passes_background()
+
+    ret, frame = video.video_capture.read()
+
+    ##################################################### initialize variables #####################################################
+    MAX_LENGTH = 3
+    last_ball_positions = deque(maxlen=MAX_LENGTH)
+    ball_bbox = [2300, 338, 2323, 361]
+    res_width = 1280
+    res_height = 720
+    wd, ht = res_width, res_height
+    cropCoords = [2300,338, 2300 + res_width, 338 + res_height]
+    [box_left, box_top, box_right, box_bottom] = cropCoords    
+    lastCoords = [box_left, box_top, box_right, box_bottom]
+    lastBoxCoords = lastCoords
+    box_width = box_right-box_left
+    box_height = box_bottom-box_top
+    fps = 24
+
+    acc_num = 27
     
-    det = pred[0]
-    im0 = im0s.copy()
+    l_val = 150
+    h_val = 800
 
-
-    try: 
-        det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()
-    except: 
-        det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0[0].shape).round()
-
-
-    ball_rows = det[det[:, 5] == 0]
-    player_rows = det[det[:, 5] == 1]
-
-    return ball_rows, player_rows
-
-
-
-
-
-@smart_inference_mode()
-def generate_frames(
-    weights=ROOT / "yolov5s.pt",  # model path or triton URL
-    source=ROOT / "data/images",  # file/dir/URL/glob/screen/0(webcam)
-    id="123",
-    team1="A", 
-    team2="B",
-    data=ROOT / "data/coco128.yaml",  # dataset.yaml path
-    imgsz=(640, 640),  # inference size (height, width)
-    conf_thres=0.1,  # confidence threshold
-    iou_thres=0.45,  # NMS IOU threshold
-    max_det=1000,  # maximum detections per image
-    device="",  # cuda device, i.e. 0 or 0,1,2,3 or cpu
-    view_img=False,  # show results
-    save_txt=False,  # save results to *.txt
-    save_csv=False,  # save results in CSV format
-    save_conf=False,  # save confidences in --save-txt labels
-    save_crop=False,  # save cropped prediction boxes
-    nosave=False,  # do not save images/videos
-    classes=None,  # filter by class: --class 0, or --class 0 2 3
-    agnostic_nms=False,  # class-agnostic NMS
-    augment=False,  # augmented inference
-    visualize=False,  # visualize features
-    update=False,  # update all models
-    project=ROOT / "runs/detect",  # save results to project/name
-    name="exp",  # save results to project/name
-    exist_ok=False,  # existing project/name ok, do not increment
-    line_thickness=3,  # bounding box thickness (pixels)
-    hide_labels=False,  # hide labels
-    hide_conf=False,  # hide confidences
-    half=False,  # use FP16 half-precision inference
-    dnn=False,  # use OpenCV DNN for ONNX inference
-    vid_stride=1,  # video frame-rate stride
-):
+    if crop_basis > 0:
+        l_val *= 0.2
     
+    pre_center_x = 0
+    pre_center_y = 0
+    ht_rate = 0
+    acc_flg = 0
+
+    temp_x_vel = 0    
+    temp_y_vel = 0
+    
+
     fx = 1280  # focal length in x-direction
     fy = 1250  # focal length in y-direction
     cx = 530 # result.shape[1] // 2  # principal point x-coordinate
@@ -137,271 +116,348 @@ def generate_frames(
     p2 = -0.002  # tangential distortion coefficient
     k3 = 0.00001  # radial distortion coefficient
     
-
-    source = str(source)
-    save_img = not nosave and not source.endswith(".txt")  # save inference images
-    is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
-    is_url = source.lower().startswith(("rtsp://", "rtmp://", "http://", "https://"))
-    webcam = source.isnumeric() or source.endswith(".streams") or (is_url and not is_file)
-    screenshot = source.lower().startswith("screen")
-    if is_url and is_file:
-        source = check_file(source)  # download
-
-    # Directories
-    save_dir = increment_path(Path(project) / name, exist_ok=exist_ok)  # increment run
-    (save_dir / "labels" if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
-
-    # Load model
-    device = select_device(device)
-    model = DetectMultiBackend(weights, device=device, dnn=dnn, data=data, fp16=half)
-    stride, names, pt = model.stride, model.names, model.pt
-    imgsz = check_img_size(imgsz, s=stride)  # check image size
-
-    # Dataloader
-    bs = 1  # batch_size
-    if webcam:
-        # view_img = check_imshow(warn=True)
-        
-        dataset = LoadStreams(source, img_size=imgsz, stride=stride, auto=pt, vid_stride=vid_stride)
-        bs = len(dataset)
-        
-    elif screenshot:
-        
-        dataset = LoadScreenshots(source, img_size=imgsz, stride=stride, auto=pt)
-        
-    else:
-        
-        dataset = LoadImages(source, img_size=imgsz, stride=stride, auto=pt, vid_stride=vid_stride)
-    _, vid_writer = [None] * bs, [None] * bs
-
-    # Run inference
-    model.warmup(imgsz=(1 if pt or model.triton else bs, 3, *imgsz))  # warmup
-    _, _, dt = 0, [], (Profile(device=device), Profile(device=device), Profile(device=device))
-
-    ball_bbox = [2300, 338, 2323, 361]
-    res_width = 1280
-    res_height = 720
-    wd, ht = res_width, res_height
-    cropCoords = [2300,338, 2300 + res_width, 338 + res_height]   
-    [box_left, box_top, box_right, box_bottom] = cropCoords    
-    lastCoords = [box_left, box_top, box_right, box_bottom]
-    lastBoxCoords = lastCoords
-    box_width = box_right-box_left
-    box_height = box_bottom-box_top    
+    center_x = 0
+    center_y = 0
+    os.makedirs("videos", exist_ok=True)
+    vid_writer = cv2.VideoWriter(f"videos/{id}_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
+    vid_h, vid_w, _ = frame.shape
+    full_writer = cv2.VideoWriter(f"videos/{id}_full.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (vid_w, vid_h))
     
-    fps = 20 
-    
-    vid_writer = cv2.VideoWriter(f"{id}_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
+    players_list = []
 
-    ### ==== other resolution 
-    res_width_2 = 320
-    res_height_2 = 180
-    wd_2, ht_2 = res_width_2, res_height_2
-    
-    vid_writer_2 = cv2.VideoWriter(f"{id}_low.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width_2, res_height_2))
+    if crop_basis == 0:
+        full_writer.write(frame)
+        
+        for _ in range(25):
+            tile_img = 255 * np.ones((256,144,3), np.uint8)
+            players_list.append(tile_img)
 
-    acc_num = 27
-    vid_h = 0
-    vid_w = 0  
-    temp_x_vel = 0    
-    temp_y_vel = 0
-    iterator = iter(dataset)
-    
-    l_val = -800
-    h_val = 800
-    
-    pre_center_x = 0
-    pre_center_y = 0
-    ht_rate = 0
 
+    ####################################  Auxiliary Variable ####################################
     frame_num = 0
-    acc_flg = 0
-
-    last_ball_bbox = [0, 0, 0, 0]
+    stream_num = 1
     
-    temp_player_points = [(0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0),
-                          (0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0), (0, 0)
-                          ]
+    map_count = 0
+    
+    while ret:
+        players_detections, ball_detections, players_value, ball_value = get_ball_player_detections(object_detector, frame)
 
-    while True:
+        detections = ball_detections + players_detections
+        # Update trackers
+        coord_transformations = update_motion_estimator(
+            motion_estimator=motion_estimator,
+            detections=detections,
+            frame=frame,
+        )
 
-        try: 
-            path, im, im0s, _, _ = next(iterator)
-        except:
-            break
-        ball_rows, player_rows = detect_object(path, im, im0s, dt, model, save_dir, augment, conf_thres, iou_thres, classes, agnostic_nms, max_det, visualize) 
-       
+        player_track_objects = player_tracker.update(
+            detections=players_detections, coord_transformations=coord_transformations
+        )
+
+        ball_track_objects = ball_tracker.update(
+            detections=ball_detections, coord_transformations=coord_transformations
+        )
+
+        player_detections = Converter.TrackedObjects_to_Detections(player_track_objects)
+        ball_detections = Converter.TrackedObjects_to_Detections(ball_track_objects)
+
+
+
+        player_detections = classifier.predict_from_detections(
+            detections=player_detections,
+            img=frame,
+        )
+        # Match update
+        ball = get_main_ball(ball_detections)
+        players = Player.from_detections(detections=players_detections, teams=teams)
+        players_ln = len(players)
+
+        ############################################################### CROP PLAYERS MAP ###############################################################
+        if crop_basis == 0:
         
+            for player in players:
+                try:
+                    player_id = player.detection.data["id"]
+                    if np.sum(np.all(players_list[player_id - 1] == [255, 255, 255], axis=2)) != 36864:
+                        continue
+                    pxmin, pymin, pxmax, pymax = player.detection.points[0][0], player.detection.points[0][1], player.detection.points[1][0], player.detection.points[1][1]
+                    tmp_img = frame[pymin:pymax, pxmin:pxmax]
+                    tmp_img = cv2.resize(tmp_img, (144, 256))
+                    players_list[player_id - 1] = tmp_img
+                    
+                except:
+                    continue
 
-        
-        try:
-            vid_h, vid_w, _ = im0s.shape
-        except: 
-            vid_h, vid_w, _ = im0s[0].shape
-
-
-        if ball_rows.numel() > 0:
             
-            _, max_idx = ball_rows[:, 4].max(0)
-            bbox = ball_rows[max_idx][None][0]
-            left, top, right, bottom, confidence, class_id = bbox.tolist()
-            left, top, right, bottom = int(left), int(top), int(right), int(bottom)
-            temp_bbox = [left, top, right, bottom]
-            [pre_center_x, pre_center_y] = boxCenter(ball_bbox)
-            [cur_center_x, cur_center_y] = boxCenter(temp_bbox)
+
+                
+                
+
+        ############################################################### INERTIA ###############################################################
+        
+        if crop_basis == 0 and len(ball_value) > 0:
+        # if crop_basis == 0 and ball.detection is not None:
+            try:
+                left, top, right, bottom, confidence = ball_value.xmin, ball_value.ymin, ball_value.xmax, ball_value.ymax, ball_value.confidence
+                left, top, right, bottom = int(left), int(top), int(right), int(bottom)
+            except:
+                high_ball = ball_value.sort_values(by='confidence', ascending=False).iloc[0]
+                left, top, right, bottom, confidence = high_ball.xmin, high_ball.ymin, high_ball.xmax, high_ball.ymax, high_ball.confidence
+                left, top, right, bottom = int(left), int(top), int(right), int(bottom)
+
+            # left, top, right, bottom = ball.detection.points[0][0], ball.detection.points[0][1], ball.detection.points[1][0], ball.detection.points[1][1]
+                
+            ball_bbox = [left, top, right, bottom]
+            [cur_center_x, cur_center_y] = boxCenter(ball_bbox)
             ball_ht = bottom - top
-            point1 = (pre_center_x, pre_center_y)    
-            point2 = (cur_center_x, cur_center_y)
-            dis_val = euclidean_distance(point1, point2)
-
-
             
-            ball_bbox = temp_bbox
-            limit_ht = math.ceil(vid_h * 0.85 + 0.5) 
-            ht_rate = ((limit_ht  - ((ball_ht / 20) - 1) * 54) - ht) / acc_num
+            limit_ht = math.ceil(vid_h * 0.7 + 0.5) 
+            ht_rate = ((limit_ht  - ((ball_ht / 20) - 1) * acc_num * 4) - ht) / acc_num
+            last_ball_positions.append([cur_center_x, cur_center_y])
+
+        elif crop_basis > 0 and players_ln > 0:
             
-            temp_player_points = [(int(p[0]) + int(p[2]) // 2, int(p[1]) + int(p[3]) // 2) for p in player_rows[:, :4]]
+            
+            if len(last_ball_positions) == 0:
+                pxmin, pymin, pxmax, pymax = 2300, 338, 2323, 361
+            else:
+                pxmin, pymin, pxmax, pymax = last_ball_positions[last_ball_ln - 1][0] - 30, last_ball_positions[last_ball_ln - 1][1] - 50, last_ball_positions[last_ball_ln - 1][0] + 30, last_ball_positions[last_ball_ln - 1][1] + 50
+            for player in players:
+                try:
+                    if player.detection.data["id"] == crop_basis:
+                        pxmin, pymin, pxmax, pymax = player.detection.points[0][0], player.detection.points[0][1], player.detection.points[1][0], player.detection.points[1][1]
+                except:
+                    print("Player missed")
+            left, top, right, bottom = pxmin, pymin, pxmax, pymax
+            ball_bbox = [left, top, right, bottom]
+            [cur_center_x, cur_center_y] = boxCenter(ball_bbox)
+            ball_ht = bottom - top
+            
+            limit_ht = math.ceil(vid_h * 0.7 + 0.5) 
+            ht_rate = ((limit_ht  - ((ball_ht / 20) - 1) * acc_num * 4) - ht) / acc_num
+            last_ball_positions.append([cur_center_x, cur_center_y])
             
         else:
-            if last_ball_bbox == ball_bbox:
+            
 
-                cur_player_points = [(int(p[0]) + int(p[2]) // 2, int(p[1]) + int(p[3]) // 2) for p in player_rows[:, :4]]
-                result_x = sum(point[0] for point in cur_player_points)
-                result_y = sum(point[1] for point in cur_player_points)
-
-                min_len = min(len(temp_player_points), len(cur_player_points))
-                for i in range(min_len):
-                    direction_x = cur_player_points[i][0] - temp_player_points[i][0]
-                    direction_y = cur_player_points[i][1] - temp_player_points[i][1]
-                    result_x += direction_x
-                    result_y += direction_y
-
+            try:
+                predict_position = predict_next_position(last_ball_positions)
                 
-                result_x /= min_len
-                result_y /= min_len
-                result_x = math.ceil(result_x + 0.5)
-                result_y = math.ceil(result_y + 0.5)
-
                 
-                temp_bbox = [result_x - 15, result_y - 15, result_x + 15, result_y + 15]
-                [pre_center_x, pre_center_y] = boxCenter(ball_bbox)
-                [cur_center_x, cur_center_y] = boxCenter(temp_bbox)
+                ball_bbox = [predict_position[0] - 15, predict_position[1] - 15, predict_position[0] + 15, predict_position[1] + 15]
+                [cur_center_x, cur_center_y] = boxCenter(ball_bbox)
+                ball_ht = bottom - top
                 
-                point1 = (pre_center_x, pre_center_y)    
-                point2 = (cur_center_x, cur_center_y)
-
-                dis_val = euclidean_distance(point1, point2)
-
-                if dis_val < 400:
-                    ball_bbox = temp_bbox
-                    print(result_x, result_y, "--Predicted Ball")
-
-
-                temp_player_points = cur_player_points
-                ht_rate = 0
-
-            else:
-                ball_bbox = last_ball_bbox
-
-                ball_ht = last_ball_bbox[3] - last_ball_bbox[1]
-                limit_ht = math.ceil(vid_h * 0.85 + 0.5) 
-                ht_rate = ((limit_ht  - ((ball_ht / 20) - 1) * 54) - ht) / acc_num
-
-
+                limit_ht = math.ceil(vid_h * 0.7 + 0.5) 
+                ht_rate = ((limit_ht  - ((ball_ht / 20) - 1) * acc_num * 4) - ht) / acc_num
+                last_ball_positions.append([cur_center_x, cur_center_y])
+            except:
+                
+                num = len(last_ball_positions)
         
-        newCoords = adjustBoxSize(ball_bbox, box_width, box_height) 
-        newCoords = adjustBoundaries(newCoords,[vid_w, vid_h]) 
+        newCoords = adjustBoxSize(ball_bbox, box_width, box_height)
+        newCoords = adjustBoundaries(newCoords,[vid_w, vid_h])
         
         [box_left, box_top, box_right, box_bottom] = newCoords
-
         [cur_center_x, cur_center_y] = boxCenter(newCoords)
         [pre_center_x, pre_center_y] = boxCenter(lastBoxCoords)
         
-        point1 = (pre_center_x, pre_center_y)    
+        point1 = (pre_center_x, pre_center_y)
         point2 = (cur_center_x, cur_center_y)
 
-        cur_camera_dis = math.ceil(euclidean_distance(point1, point2) + 0.5)
+        cur_camera_dis = abs(math.ceil(euclidean_distance(point1, point2) + 0.5))
 
         if acc_flg == 0:
+
             if  cur_camera_dis >= l_val and cur_camera_dis < h_val:
-                res_points, temp_x_vel, temp_y_vel = interpolate_points_uniform_acceleration(point1, point2, temp_x_vel, temp_y_vel, acc_num)
-                acc_flg = 1
+                
+                res_points, temp_x_vel, temp_y_vel = interpolate_points(point1, point2, acc_num, vid_w, vid_h)
+                acc_num = 24
+                print("Nor")
             elif cur_camera_dis < l_val:
-                res_points, temp_x_vel, temp_y_vel = interpolate_points(point1, point2, acc_num)
+                res_points, temp_x_vel, temp_y_vel = interpolate_points_uniform_acceleration(point1, point2, temp_x_vel, temp_y_vel, acc_num, vid_w, vid_h)
+                acc_flg = 1
+                
+
+                print("Acc")
 
             elif cur_camera_dis > h_val:
-                res_points, temp_x_vel, temp_y_vel = interpolate_points_uniform_deceleration(point1, point2, temp_x_vel, temp_y_vel, acc_num)
-                # temp_x_vel, temp_y_vel = 0, 0
+                res_points, temp_x_vel, temp_y_vel = interpolate_points_uniform_deceleration(point1, point2, temp_x_vel, temp_y_vel, acc_num, vid_w, vid_h)
+                acc_num = 15
+                acc_flg = 0
+                print("DEC")
+
         else:
-            res_points, temp_x_vel, temp_y_vel = interpolate_points_uniform_deceleration(point1, point2, temp_x_vel, temp_y_vel, acc_num)
-            # temp_x_vel, temp_y_vel = 0, 0
+            res_points, temp_x_vel, temp_y_vel= interpolate_points_uniform_deceleration(point1, point2, temp_x_vel, temp_y_vel, acc_num, vid_w, vid_h)
             acc_flg = 0
+            acc_num = 27
+        #     print("DEC")
+        
+        lastBoxCoords = newCoords  
         
 
-        lastBoxCoords = newCoords  
-
-
-        ln = len(res_points)
-        print(res_points[ln - 1], "--ball---")
-
-        frame_num += 1
         
         for res_point in res_points:
+            if frame_num > 200:
+                vid_writer.release()
+                convert_mp4_to_hls(f"./videos/{id}_out.mp4", f"{id}{stream_num}")
+                vid_writer = cv2.VideoWriter(f"videos/{id}_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
+                stream_num += 1
+                frame_num = 0
             try:
-                path, im, im0s, cap, s = next(iterator)
-            except: 
+                ret, frame = video.video_capture.read()
+                if crop_basis == 0:
+                    full_writer.write(frame)
+                players_detections, ball_detections, players_value, ball_value = get_ball_player_detections(object_detector, frame)
+                detections = ball_detections + players_detections
+                # Update trackers
+                coord_transformations = update_motion_estimator(
+                    motion_estimator=motion_estimator,
+                    detections=detections,
+                    frame=frame,
+                )
+
+                player_track_objects = player_tracker.update(
+                    detections=players_detections, coord_transformations=coord_transformations
+                )
+
+                ball_track_objects = ball_tracker.update(
+                    detections=ball_detections, coord_transformations=coord_transformations
+                )
+
+                player_detections = Converter.TrackedObjects_to_Detections(player_track_objects)
+                ball_detections = Converter.TrackedObjects_to_Detections(ball_track_objects)
+                player_detections = classifier.predict_from_detections(
+                    detections=player_detections,
+                    img=frame,
+                )
+                # Match update
+                ball = get_main_ball(ball_detections)
+                players = Player.from_detections(detections=players_detections, teams=teams)
+                
+                players_ln = len(players)
+                if crop_basis == 0 and len(ball_value) > 0:
+                # if crop_basis == 0 and ball.detection is not None:
+
+                    try:
+                        one_ball = ball_value.iloc[0]
+                        left, top, right, bottom, confidence = one_ball.xmin, one_ball.ymin, one_ball.xmax, one_ball.ymax, one_ball.confidence
+                        left, top, right, bottom = int(left), int(top), int(right), int(bottom)
+                    except:
+                        high_ball = ball_value.sort_values(by='confidence', ascending=False).iloc[0]
+                        left, top, right, bottom, confidence = high_ball.xmin, high_ball.ymin, high_ball.xmax, high_ball.ymax, high_ball.confidence
+                        left, top, right, bottom = int(left), int(top), int(right), int(bottom)
+
+
+                    # left, top, right, bottom = ball.detection.points[0][0], ball.detection.points[0][1], ball.detection.points[1][0], ball.detection.points[1][1]
+                    ball_bbox = [left, top, right, bottom]
+                    [cur_center_x, cur_center_y] = boxCenter(ball_bbox)
+                    last_ball_positions.append([cur_center_x, cur_center_y])
+
+                elif crop_basis > 0 and players_ln > 0:
+                    last_ball_ln = len(last_ball_positions)
+                    if last_ball_ln == 0:
+                        pxmin, pymin, pxmax, pymax = 2300, 338, 2323, 361
+                    else:
+                        pxmin, pymin, pxmax, pymax = last_ball_positions[last_ball_ln - 1][0] - 30, last_ball_positions[last_ball_ln - 1][1] - 50, last_ball_positions[last_ball_ln - 1][0] + 30, last_ball_positions[last_ball_ln - 1][1] + 50
+
+                    for player in players:
+                        try:
+                            if player.detection.data["id"] == crop_basis:
+                                pxmin, pymin, pxmax, pymax = player.detection.points[0][0], player.detection.points[0][1], player.detection.points[1][0], player.detection.points[1][1]
+                        except:
+                            print("Player missed")
+                    left, top, right, bottom = pxmin, pymin, pxmax, pymax
+
+
+                    ball_bbox = [left, top, right, bottom]
+                    [cur_center_x, cur_center_y] = boxCenter(ball_bbox)
+
+                    last_ball_positions.append([cur_center_x, cur_center_y])
+                
+
+                center_x, center_y = res_point
+                # ht += ht_rate
+                # wd = (res_width * ht) / res_height
+                angle = calculate_angle(center_x, center_y, vid_w, vid_h)
+                undistorted_img = screen_processing(frame, center_x, center_y, wd, ht, angle, vid_w, vid_h, res_width, res_height, fx, fy, cx, cy, k1, k2, p1, p2, k3)
+            except:
+                vid_writer.release()
+                convert_mp4_to_hls(f"./videos/{id}_out.mp4", f"{id}{stream_num}")
+                if crop_basis == 0:
+                    player_map_img = create_player_map(players_list)
+                    cv2.imwrite(f"{id}.png", player_map_img)
+
                 break
-
-            ball_rows, player_rows = detect_object(path, im, im0s, dt, model, save_dir, augment, conf_thres, iou_thres, classes, agnostic_nms, max_det, visualize)
-
-            if ball_rows.numel() > 0:
+            opencv_image_rgb = cv2.cvtColor(undistorted_img, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(opencv_image_rgb)
             
-                _, max_idx = ball_rows[:, 4].max(0)
-                bbox = ball_rows[max_idx][None][0]
-                left, top, right, bottom, confidence, class_id = bbox.tolist()
-                left, top, right, bottom = int(left), int(top), int(right), int(bottom)
-                last_ball_bbox = [left, top, right, bottom]
-            temp_player_points = [(int(p[0]) + int(p[2]) // 2, int(p[1]) + int(p[3]) // 2) for p in player_rows[:, :4]]
-            ht = ht_rate + ht 
-            wd = (res_width * ht) / res_height
+            if enable_possession_counter:
+                
+                pil_image = match.draw_possession_counter(
+                    pil_image, counter_background=possession_background, debug=False
+                )
 
-            ht_2 = ht_rate + ht_2
-            wd_2 = (res_width_2 * ht_2) / res_height_2
+            if enable_pass_detection:
+                
+                pass_list = match.passes
+                pil_image = Pass.draw_pass_list(
+                    img=pil_image, passes=pass_list, coord_transformations=coord_transformations
+                )
+                pil_image = match.draw_passes_counter(
+                    pil_image, counter_background=passes_background, debug=False
+                )
 
-            try:
-                _, _, _ = im0s.shape    
-                im0 = im0s.copy()
-            except: 
-                _, _, _ = im0s[0].shape    
-                im0 = im0s[0].copy()
+            pil_image_array = np.array(pil_image)
+            final_frame = cv2.cvtColor(pil_image_array, cv2.COLOR_RGB2BGR)
             
-            center_x, center_y = res_point
-
-            angle = calculate_angle(center_x, center_y, vid_w, vid_h)
-
-            undistorted_img = screen_processing(im0, center_x, center_y, wd, ht, angle, vid_w, vid_h, res_width, res_height, fx, fy, cx, cy, k1, k2, p1, p2, k3)
-            undistorted_img_2 = screen_processing(im0, center_x, center_y, wd_2, ht_2, angle, vid_w, vid_h, res_width_2, res_height_2, fx, fy, cx, cy, k1, k2, p1, p2, k3)
-
-            vid_writer.write(undistorted_img)
-            vid_writer_2.write(undistorted_img_2)
-            cv2.waitKey(1)  # Check for key press every 1ms
-            
-            _, buffer = cv2.imencode('.jpg', undistorted_img)
+            _, buffer = cv2.imencode('.jpg', final_frame)
             decoded_img = buffer.tobytes()
             yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + decoded_img + b'\r\n')
-              
+
+
+            vid_writer.write(final_frame)
+            frame_num += 1
+
+
+            try:
+                match.update(players, ball)
+            except:
+                continue
+            cv2.waitKey(1)  # Check for key press every 1ms
+        
+        try:
+            ret, frame = video.video_capture.read()
+        except:
+            vid_writer.release()
+            convert_mp4_to_hls(f"./videos/{id}_out.mp4", f"{id}{stream_num}")
+            if crop_basis == 0:
+                player_map_img = create_player_map(players_list)
+                cv2.imwrite(f"{id}.png", player_map_img)
+
+
+        if crop_basis == 0:
+            full_writer.write(frame)
+        
     print("########################< END >########################")
 
 
 @app.route('/video')
 def video():
-    weights = request.args.get('weights')
-    source = request.args.get('source')
+    video_path = request.args.get('video', default="videos/soccer_possession.mp4", type=str)
+    model_path = request.args.get('model', default="models/ball.pt", type=str)
+    enable_pass_detection = request.args.get('passes', type=lambda x: x.lower() in ['true', '1', 'yes'])
+    enable_possession_counter = request.args.get('possession', type=lambda x: x.lower() in ['true', '1', 'yes'])
+
+    
     id = request.args.get('id')
     team1 = request.args.get('team1')
     team2 = request.args.get('team2')
+    crop_basis = request.args.get('crop_basis', type=int)
 
-    return Response(generate_frames(weights, source, id, team1, team2), mimetype='multipart/x-mixed-replace; boundary=frame')
+    
+    return Response(generate_frames(video_path, model_path, enable_pass_detection, enable_possession_counter, id, team1, team2, crop_basis), mimetype='multipart/x-mixed-replace; boundary=frame')
+    
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000)

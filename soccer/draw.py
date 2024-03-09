@@ -329,12 +329,15 @@ class Draw:
         PIL.Image.Image
             Image with the half rounded rectangle drawn
         """
+
+
+        
         overlay = img.copy()
         draw = PIL.ImageDraw.Draw(overlay, "RGBA")
         draw.rounded_rectangle(rectangle, radius, fill=color)
 
         height = rectangle[1][1] - rectangle[0][1]
-        stop_width = 13
+        stop_width = 15
 
         if left:
             draw.rectangle(
@@ -397,7 +400,7 @@ class Draw:
         draw = PIL.ImageDraw.Draw(img)
 
         if font is None:
-            font = PIL.ImageFont.truetype("fonts/Gidole-Regular.ttf", size=24)
+            font = PIL.ImageFont.truetype("fonts/Gidole-Regular.ttf", size=10)
 
         length = draw.textlength(text, font=font)
         w = length

@@ -5,7 +5,7 @@ import numpy as np
 import PIL
 from norfair import Tracker, Video
 from norfair.camera_motion import MotionEstimator
-from norfair.distances import mean_euclidean
+from norfair.distances import mean_euclidean, mean_manhattan, frobenius
 
 from inference import Converter, HSVClassifier, InertiaClassifier, YoloV5
 from inference.filters import filters
@@ -74,17 +74,17 @@ match.team_possession = man_city
 
 # Tracking
 player_tracker = Tracker(
-    distance_function=mean_euclidean,
+    distance_function=frobenius,
     distance_threshold=250,
-    initialization_delay=5,
-    hit_counter_max=90,
+    initialization_delay=3,
+    hit_counter_max=900,
 )
 
 ball_tracker = Tracker(
-    distance_function=mean_euclidean,
-    distance_threshold=100,
-    initialization_delay=10,
-    hit_counter_max=2000,
+    distance_function=frobenius,
+    distance_threshold=2500,
+    initialization_delay=2,
+    hit_counter_max=200,
 )
 motion_estimator = MotionEstimator()
 coord_transformations = None
@@ -174,3 +174,4 @@ for i, frame in enumerate(video):
 
     # Write video
     video.write(frame)
+    video.show(frame)
