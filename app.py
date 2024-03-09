@@ -444,8 +444,8 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
 
 @app.route('/video')
 def video():
-    video_path = request.args.get('video', default="videos/soccer_possession.mp4", type=str)
-    model_path = request.args.get('model', default="models/ball.pt", type=str)
+    video_path = request.args.get('source', default="videos/soccer_possession.mp4", type=str)
+    model_path = request.args.get('weights', default="models/yolov5s_class3_300_25k.pt", type=str)
     enable_pass_detection = request.args.get('passes', type=lambda x: x.lower() in ['true', '1', 'yes'])
     enable_possession_counter = request.args.get('possession', type=lambda x: x.lower() in ['true', '1', 'yes'])
 

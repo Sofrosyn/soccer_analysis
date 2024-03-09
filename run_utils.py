@@ -83,19 +83,14 @@ def get_ball_player_detections(
         List of player detections
     """
     object_df = object_detector.predict(frame)
-    
-
-
     person_df = object_df[object_df["name"] == "player"]
     person_df = person_df[person_df["confidence"] > 0.35]
     ball_df = object_df[object_df["name"] == "ball"]
     ball_df = ball_df[ball_df["confidence"] > 0.01]
+    
     person_detections = Converter.DataFrame_to_Detections(person_df)
     ball_detections = Converter.DataFrame_to_Detections(ball_df)
-
-    return person_detections, ball_detections
-
-
+    return person_detections, ball_detections, person_df, ball_df
 
 def create_mask(frame: np.ndarray, detections: List[norfair.Detection]) -> np.ndarray:
     """
