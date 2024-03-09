@@ -30,6 +30,15 @@ app = Flask(__name__)
 def generate_frames(video_path, model_path, enable_pass_detection, enable_possession_counter, id, team1, team2, crop_basis):
    
 
+    output_dir = "../../rtmp_out"
+    if not os.path.exists(output_dir):
+        try:
+            os.makedirs(output_dir)
+            print(f"Folder '{output_dir}' created successfully.")
+        except OSError as e:
+            print(f"Error creating folder '{output_dir}': {str(e)}")
+
+    
     video = Video(input_path=video_path)
     fps = video.video_capture.get(cv2.CAP_PROP_FPS)
 
@@ -119,9 +128,10 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
     center_x = 0
     center_y = 0
     os.makedirs("videos", exist_ok=True)
-    vid_writer = cv2.VideoWriter(f"videos/{id}_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
+    vid_writer = cv2.VideoWriter(f"{output_dir}/{id}_ht_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
+    vid_writer_sd = cv2.VideoWriter(f"{output_dir}/{id}_sd_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (320, 240))
     vid_h, vid_w, _ = frame.shape
-    full_writer = cv2.VideoWriter(f"videos/{id}_full.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (vid_w, vid_h))
+    full_writer = cv2.VideoWriter(f"{output_dir}/{id}_full.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (vid_w, vid_h))
     
     players_list = []
 
@@ -217,7 +227,7 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
 
         elif crop_basis > 0 and players_ln > 0:
             
-            
+            last_ball_ln = len(last_ball_positions)
             if len(last_ball_positions) == 0:
                 pxmin, pymin, pxmax, pymax = 2300, 338, 2323, 361
             else:
@@ -300,82 +310,15 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
         for res_point in res_points:
             if frame_num > 200:
                 vid_writer.release()
-                convert_mp4_to_hls(f"./videos/{id}_out.mp4", f"{id}{stream_num}")
-                vid_writer = cv2.VideoWriter(f"videos/{id}_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
+                convert_mp4_to_hls(f"{output_dir}/{id}_ht_out.mp4", f"{id}{stream_num}")
+                vid_writer = cv2.VideoWriter(f"{output_dir}/{id}_ht_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
                 stream_num += 1
                 frame_num = 0
             try:
                 ret, frame = video.video_capture.read()
                 if crop_basis == 0:
                     full_writer.write(frame)
-                players_detections, ball_detections, players_value, ball_value = get_ball_player_detections(object_detector, frame)
-                detections = ball_detections + players_detections
-                # Update trackers
-                coord_transformations = update_motion_estimator(
-                    motion_estimator=motion_estimator,
-                    detections=detections,
-                    frame=frame,
-                )
-
-                player_track_objects = player_tracker.update(
-                    detections=players_detections, coord_transformations=coord_transformations
-                )
-
-                ball_track_objects = ball_tracker.update(
-                    detections=ball_detections, coord_transformations=coord_transformations
-                )
-
-                player_detections = Converter.TrackedObjects_to_Detections(player_track_objects)
-                ball_detections = Converter.TrackedObjects_to_Detections(ball_track_objects)
-                player_detections = classifier.predict_from_detections(
-                    detections=player_detections,
-                    img=frame,
-                )
-                # Match update
-                ball = get_main_ball(ball_detections)
-                players = Player.from_detections(detections=players_detections, teams=teams)
-                
-                players_ln = len(players)
-                if crop_basis == 0 and len(ball_value) > 0:
-                # if crop_basis == 0 and ball.detection is not None:
-
-                    try:
-                        one_ball = ball_value.iloc[0]
-                        left, top, right, bottom, confidence = one_ball.xmin, one_ball.ymin, one_ball.xmax, one_ball.ymax, one_ball.confidence
-                        left, top, right, bottom = int(left), int(top), int(right), int(bottom)
-                    except:
-                        high_ball = ball_value.sort_values(by='confidence', ascending=False).iloc[0]
-                        left, top, right, bottom, confidence = high_ball.xmin, high_ball.ymin, high_ball.xmax, high_ball.ymax, high_ball.confidence
-                        left, top, right, bottom = int(left), int(top), int(right), int(bottom)
-
-
-                    # left, top, right, bottom = ball.detection.points[0][0], ball.detection.points[0][1], ball.detection.points[1][0], ball.detection.points[1][1]
-                    ball_bbox = [left, top, right, bottom]
-                    [cur_center_x, cur_center_y] = boxCenter(ball_bbox)
-                    last_ball_positions.append([cur_center_x, cur_center_y])
-
-                elif crop_basis > 0 and players_ln > 0:
-                    last_ball_ln = len(last_ball_positions)
-                    if last_ball_ln == 0:
-                        pxmin, pymin, pxmax, pymax = 2300, 338, 2323, 361
-                    else:
-                        pxmin, pymin, pxmax, pymax = last_ball_positions[last_ball_ln - 1][0] - 30, last_ball_positions[last_ball_ln - 1][1] - 50, last_ball_positions[last_ball_ln - 1][0] + 30, last_ball_positions[last_ball_ln - 1][1] + 50
-
-                    for player in players:
-                        try:
-                            if player.detection.data["id"] == crop_basis:
-                                pxmin, pymin, pxmax, pymax = player.detection.points[0][0], player.detection.points[0][1], player.detection.points[1][0], player.detection.points[1][1]
-                        except:
-                            print("Player missed")
-                    left, top, right, bottom = pxmin, pymin, pxmax, pymax
-
-
-                    ball_bbox = [left, top, right, bottom]
-                    [cur_center_x, cur_center_y] = boxCenter(ball_bbox)
-
-                    last_ball_positions.append([cur_center_x, cur_center_y])
-                
-
+ 
                 center_x, center_y = res_point
                 # ht += ht_rate
                 # wd = (res_width * ht) / res_height
@@ -383,10 +326,10 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
                 undistorted_img = screen_processing(frame, center_x, center_y, wd, ht, angle, vid_w, vid_h, res_width, res_height, fx, fy, cx, cy, k1, k2, p1, p2, k3)
             except:
                 vid_writer.release()
-                convert_mp4_to_hls(f"./videos/{id}_out.mp4", f"{id}{stream_num}")
+                convert_mp4_to_hls(f"{output_dir}/{id}_ht_out.mp4", f"{id}{stream_num}")
                 if crop_basis == 0:
                     player_map_img = create_player_map(players_list)
-                    cv2.imwrite(f"{id}.png", player_map_img)
+                    cv2.imwrite(f"{output_dir}/{id}.png", player_map_img)
 
                 break
             opencv_image_rgb = cv2.cvtColor(undistorted_img, cv2.COLOR_BGR2RGB)
@@ -430,10 +373,10 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
             ret, frame = video.video_capture.read()
         except:
             vid_writer.release()
-            convert_mp4_to_hls(f"./videos/{id}_out.mp4", f"{id}{stream_num}")
+            convert_mp4_to_hls(f"{output_dir}/{id}_ht_out.mp4", f"{id}{stream_num}")
             if crop_basis == 0:
                 player_map_img = create_player_map(players_list)
-                cv2.imwrite(f"{id}.png", player_map_img)
+                cv2.imwrite(f"{output_dir}/{id}.png", player_map_img)
 
 
         if crop_basis == 0:
