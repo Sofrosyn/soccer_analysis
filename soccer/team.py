@@ -40,7 +40,7 @@ class Team:
             self.board_color = board_color
 
         if len(abbreviation) < 3 or not abbreviation.isupper():
-            raise ValueError("abbreviation must be length 3 and uppercase")
+            raise ValueError("abbreviation must be length longer than 3 and uppercase")
 
     def get_percentage_possession(self, duration: int) -> float:
         """
