@@ -2,7 +2,7 @@ import subprocess
 import os
 def convert_mp4_to_hls(mp4_file_path, stream_name):
 
-    output_dir = "../.../../rtmp_out"
+    output_dir = ".../../rtmp_out"
     if not os.path.exists(output_dir):
         try:
             os.makedirs(output_dir)

@@ -30,7 +30,7 @@ app = Flask(__name__)
 def generate_frames(video_path, model_path, enable_pass_detection, enable_possession_counter, id, team1, team2, crop_basis):
    
 
-    output_dir = "../../rtmp_out"
+    output_dir = "/../rtmp_out"
     if not os.path.exists(output_dir):
         try:
             os.makedirs(output_dir)
@@ -128,7 +128,7 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
     center_x = 0
     center_y = 0
     os.makedirs("videos", exist_ok=True)
-    vid_writer = cv2.VideoWriter(f"{output_dir}/{id}_ht_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
+    vid_writer = cv2.VideoWriter(f"{output_dir}/{id}_hd_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
     vid_writer_sd = cv2.VideoWriter(f"{output_dir}/{id}_sd_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (320, 240))
     vid_h, vid_w, _ = frame.shape
     full_writer = cv2.VideoWriter(f"{output_dir}/{id}_full.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (vid_w, vid_h))
@@ -310,8 +310,8 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
         for res_point in res_points:
             if frame_num > 200:
                 vid_writer.release()
-                convert_mp4_to_hls(f"{output_dir}/{id}_ht_out.mp4", f"{id}{stream_num}")
-                vid_writer = cv2.VideoWriter(f"{output_dir}/{id}_ht_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
+                convert_mp4_to_hls(f"{output_dir}/{id}_hd_out.mp4", f"{id}{stream_num}")
+                vid_writer = cv2.VideoWriter(f"{output_dir}/{id}_hd_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
                 stream_num += 1
                 frame_num = 0
             try:
@@ -326,7 +326,7 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
                 undistorted_img = screen_processing(frame, center_x, center_y, wd, ht, angle, vid_w, vid_h, res_width, res_height, fx, fy, cx, cy, k1, k2, p1, p2, k3)
             except:
                 vid_writer.release()
-                convert_mp4_to_hls(f"{output_dir}/{id}_ht_out.mp4", f"{id}{stream_num}")
+                convert_mp4_to_hls(f"{output_dir}/{id}_hd_out.mp4", f"{id}{stream_num}")
                 if crop_basis == 0:
                     player_map_img = create_player_map(players_list)
                     cv2.imwrite(f"{output_dir}/{id}.png", player_map_img)
