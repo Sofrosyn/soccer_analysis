@@ -372,7 +372,7 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
         try:
             ret, frame = video.video_capture.read()
         except:
-            vid_writer.release()
+            # vid_writer.release()
             convert_mp4_to_hls(f"{output_dir}/{id}_ht_out.mp4", f"{id}{stream_num}")
             if crop_basis == 0:
                 player_map_img = create_player_map(players_list)
