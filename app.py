@@ -47,14 +47,14 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
 
     team_one = Team(
         name=team1,
-        abbreviation="RED",
+        abbreviation="清华",
         color=(0, 0, 255),
         board_color=(244, 86, 64),
         text_color=(255, 255, 255),
     )
     team_two = Team(
         name=team2, 
-        abbreviation="WHITE", 
+        abbreviation="大连", 
         color=(250, 250, 250))
     teams = [team_one, team_two]
     match = Match(home=team_one, away=team_two, fps=fps)

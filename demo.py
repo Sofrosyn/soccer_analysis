@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 
 # Load your image
-image_path = '123.png'
+image_path = 'test.jpg'
 image = cv2.imread(image_path)
 
 # Convert the OpenCV image (BGR format) to RGB format
