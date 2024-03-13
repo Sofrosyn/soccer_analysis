@@ -180,10 +180,6 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
         ball = get_main_ball(ball_detections)
         players = Player.from_detections(detections=players_detections, teams=teams)
         players_ln = len(players)
-        print(match.home.passes, "******** HOME PASS *******")
-        print(match.away.passes, "******** AWAY PASS *******")
-        print(match.away.possession, "******** AWAY POSS *******")
-        print(match.home.possession, "******** HOME POSS *******")
         ############################################################### CROP PLAYERS MAP ###############################################################
         if crop_basis == 0:
         
@@ -314,7 +310,7 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
             
             if frame_num > 200:
                 vid_writer.release()
-                convert_mp4_to_hls(f"{output_dir}/{id}_hd_out.mp4", f"{id}{stream_num}")
+                convert_mp4_to_hls(f"{output_dir}/{id}_hd_out.mp4", f"{id}_{stream_num}")
                 vid_writer = cv2.VideoWriter(f"{output_dir}/{id}_hd_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
                 stream_num += 1
                 frame_num = 0
@@ -330,7 +326,7 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
                 undistorted_img = screen_processing(frame, center_x, center_y, wd, ht, angle, vid_w, vid_h, res_width, res_height, fx, fy, cx, cy, k1, k2, p1, p2, k3)
             except:
                 vid_writer.release()
-                convert_mp4_to_hls(f"{output_dir}/{id}_hd_out.mp4", f"{id}{stream_num}")
+                convert_mp4_to_hls(f"{output_dir}/{id}_hd_out.mp4", f"{id}_{stream_num}")
                 if crop_basis == 0:
                     player_map_img = create_player_map(players_list)
                     cv2.imwrite(f"{output_dir}/{id}.png", player_map_img)
@@ -402,7 +398,7 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
             ret, frame = video.video_capture.read()
         except:
             # vid_writer.release()
-            convert_mp4_to_hls(f"{output_dir}/{id}_ht_out.mp4", f"{id}{stream_num}")
+            convert_mp4_to_hls(f"{output_dir}/{id}_ht_out.mp4", f"{id}_{stream_num}")
             if crop_basis == 0:
                 player_map_img = create_player_map(players_list)
                 cv2.imwrite(f"{output_dir}/{id}.png", player_map_img)
