@@ -1,36 +1,33 @@
-from PIL import ImageFont, ImageDraw, Image
-import numpy as np
-import cv2
+import subprocess
+import os
 
-# Load your image
-image_path = 'test.jpg'
-image = cv2.imread(image_path)
+def segment_stream(rtmp_url, output_dir, segment_time=12):
+    """
+    Segments an RTMP stream and saves it as HLS (HTTP Live Streaming) format.
+    
+    Parameters:
+    - rtmp_url: URL of the RTMP stream.
+    - output_dir: Directory to save the HLS files.
+    - segment_time: Duration (in seconds) of each segment.
+    """
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # Command to segment the stream and create HLS playlist and segments
+    command = [
+        'ffmpeg',
+        '-i', rtmp_url,  # Input from the RTMP stream
+        '-c', 'copy',  # Use the same codecs for both audio and video
+        '-f', 'hls',  # Output format HLS
+        '-hls_time', str(segment_time),  # Segment duration
+        '-hls_playlist_type', 'event',  # Playlist type
+        os.path.join(output_dir, 'stream.m3u8')  # Output HLS playlist file
+    ]
+    
+    # Execute the command
+    subprocess.run(command)
 
-# Convert the OpenCV image (BGR format) to RGB format
-image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-
-# Create a drawing context for the image
-draw = ImageDraw.Draw(image_pil)
-
-# Specify the font: the font file should support Chinese characters
-font_path = 'SimSun.TTF'
-font_size = 20
-font = ImageFont.truetype(font_path, font_size)
-
-# Define the position where you want to start drawing the text
-position = (500, 500)  # Change as per your requirement
-
-# Define the text and color
-text = "你好, 世界!"  # 'Hello, World!' in Chinese
-color = 'rgb(2, 25, 255)'  # White color
-
-# Draw the text onto the image
-draw.text(position, text, fill=color, font=font)
-
-# Convert the PIL image back to an OpenCV image
-result_image = cv2.cvtColor(np.array(image_pil), cv2.COLOR_RGB2BGR)
-
-# Display the result image with OpenCV
-cv2.imshow("Image with Chinese Text", result_image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+if __name__ == "__main__":
+    rtmp_url = "1_clip.mp4"
+    output_dir = "./videos"
+    segment_stream(rtmp_url, output_dir)

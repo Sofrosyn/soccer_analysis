@@ -388,9 +388,9 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
                 vid_writer_sd.write(final_sd_frame)
             else:
 
-                player_writer.write(final_frame)
+                vid_writer.write(final_frame)
                 final_sd_frame = cv2.resize(final_frame, (320, 240))
-                player_writer_sd.write(final_sd_frame)
+                vid_writer_sd.write(final_sd_frame)
 
             frame_num += 1
 
