@@ -4,9 +4,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 def convert_mp4_to_hls(mp4_file_path, stream_name):
-    output_dir = os.path.join(BASE_DIR, "../rtmp_out")
-    output_dir = os.path.normpath(output_dir)
-
+    output_dir = os.path.normpath(os.path.join(BASE_DIR, "..", "rtmp_out"))
     if not os.path.exists(output_dir):
         try:
             os.makedirs(output_dir)

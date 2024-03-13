@@ -28,9 +28,8 @@ app = Flask(__name__)
 
 
 def generate_frames(video_path, model_path, enable_pass_detection, enable_possession_counter, id, team1, team2, crop_basis):
-   
 
-    output_dir = "/../rtmp_out"
+    output_dir = os.path.normpath(os.path.join(BASE_DIR, "..", "rtmp_out"))
     if not os.path.exists(output_dir):
         try:
             os.makedirs(output_dir)
@@ -318,7 +317,7 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
                 ret, frame = video.video_capture.read()
                 if crop_basis == 0:
                     full_writer.write(frame)
- 
+    
                 center_x, center_y = res_point
                 # ht += ht_rate
                 # wd = (res_width * ht) / res_height
