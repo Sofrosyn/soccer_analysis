@@ -400,7 +400,7 @@ class Draw:
         draw = PIL.ImageDraw.Draw(img)
 
         if font is None:
-            font = PIL.ImageFont.truetype("fonts/SimSun.ttf", size=10)
+            font = PIL.ImageFont.truetype("fonts/SimSun.ttf", size=11)
 
         length = draw.textlength(text, font=font)
         w = length
@@ -408,7 +408,7 @@ class Draw:
 
         text_origin = (
             origin[0] + width / 2 - w / 2,
-            origin[1] + height / 2 - h / 4,
+            origin[1] + height / 2 - h / 6,
         )
 
         draw.text(text_origin, text, font=font, fill=color)

@@ -47,14 +47,14 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
 
     team_one = Team(
         name=team1,
-        abbreviation=team1[:3],
+        abbreviation=team1[:4],
         color=(0, 0, 255),
         board_color=(244, 86, 64),
         text_color=(255, 255, 255),
     )
     team_two = Team(
         name=team2, 
-        abbreviation=team2[:3], 
+        abbreviation=team2[:4], 
         color=(250, 250, 250))
     teams = [team_one, team_two]
     match = Match(home=team_one, away=team_two, fps=fps)
@@ -131,6 +131,9 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
     vid_writer_sd = cv2.VideoWriter(f"{output_dir}/{id}_sd_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (320, 240))
     vid_h, vid_w, _ = frame.shape
     full_writer = cv2.VideoWriter(f"{output_dir}/{id}_full.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (vid_w, vid_h))
+
+    player_writer = cv2.VideoWriter(f"{output_dir}/{id}_{crop_basis}_hd_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (res_width, res_height))
+    player_writer_sd = cv2.VideoWriter(f"{output_dir}/{id}_{crop_basis}_sd_out.mp4", cv2.VideoWriter_fourcc(*"mp4v"), fps, (320, 240))
     
     players_list = []
 
@@ -180,10 +183,7 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
         ball = get_main_ball(ball_detections)
         players = Player.from_detections(detections=players_detections, teams=teams)
         players_ln = len(players)
-        print(match.home.passes, "******** HOME PASS *******")
-        print(match.away.passes, "******** AWAY PASS *******")
-        print(match.away.possession, "******** AWAY POSS *******")
-        print(match.home.possession, "******** HOME POSS *******")
+
         ############################################################### CROP PLAYERS MAP ###############################################################
         if crop_basis == 0:
         
@@ -199,11 +199,6 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
                     
                 except:
                     continue
-
-            
-
-                
-                
 
         ############################################################### INERTIA ###############################################################
         
@@ -387,8 +382,16 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
             decoded_img = buffer.tobytes()
             yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + decoded_img + b'\r\n')
 
+            if crop_basis == 0:
+                vid_writer.write(final_frame)
+                final_sd_frame = cv2.resize(final_frame, (320, 240))
+                vid_writer_sd.write(final_sd_frame)
+            else:
 
-            vid_writer.write(final_frame)
+                player_writer.write(final_frame)
+                final_sd_frame = cv2.resize(final_frame, (320, 240))
+                player_writer_sd.write(final_sd_frame)
+
             frame_num += 1
 
 
