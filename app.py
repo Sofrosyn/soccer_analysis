@@ -7,7 +7,7 @@ from norfair.distances import mean_euclidean
 from PIL import Image
 from collections import deque
 from flask import Flask, Response, request
-
+import json
 from inference import Converter, HSVClassifier, InertiaClassifier, YoloV5
 from inference.filters import filters
 from run_utils import (
@@ -180,7 +180,10 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
         ball = get_main_ball(ball_detections)
         players = Player.from_detections(detections=players_detections, teams=teams)
         players_ln = len(players)
-
+        print(match.home.passes, "******** HOME PASS *******")
+        print(match.away.passes, "******** AWAY PASS *******")
+        print(match.away.possession, "******** AWAY POSS *******")
+        print(match.home.possession, "******** HOME POSS *******")
         ############################################################### CROP PLAYERS MAP ###############################################################
         if crop_basis == 0:
         
@@ -307,6 +310,8 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
 
         
         for res_point in res_points:
+
+            
             if frame_num > 200:
                 vid_writer.release()
                 convert_mp4_to_hls(f"{output_dir}/{id}_hd_out.mp4", f"{id}{stream_num}")
@@ -330,6 +335,31 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
                     player_map_img = create_player_map(players_list)
                     cv2.imwrite(f"{output_dir}/{id}.png", player_map_img)
 
+                    analysis_file_path = f"{output_dir}/{id}.json"
+                    analaysis_data = {
+                        "data": [
+                            {
+                                "possession": {
+                                    "team1": match.home.possession,
+                                    "team2": match.away.possession
+                                }
+                            },
+                            {
+                                "passes": {
+                                    "team1": match.home.passes,
+                                    "team2": match.away.passes
+                                }
+                            }
+                        ]
+                    }
+                    try:
+                        with open(analysis_file_path, 'w') as json_file:
+                            json.dump(analaysis_data, json_file, indent=4)
+                        print(f"Data has been written to '{analysis_file_path}' successfully.")
+                    except Exception as e:
+                        print(f"An error occurred while writing to the file: {e}")
+
+
                 break
             opencv_image_rgb = cv2.cvtColor(undistorted_img, cv2.COLOR_BGR2RGB)
             pil_image = Image.fromarray(opencv_image_rgb)
@@ -339,7 +369,7 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
                 pil_image = match.draw_possession_counter(
                     pil_image, counter_background=possession_background, debug=False
                 )
-
+                
             if enable_pass_detection:
                 
                 pass_list = match.passes
@@ -376,6 +406,30 @@ def generate_frames(video_path, model_path, enable_pass_detection, enable_posses
             if crop_basis == 0:
                 player_map_img = create_player_map(players_list)
                 cv2.imwrite(f"{output_dir}/{id}.png", player_map_img)
+
+                analysis_file_path = f"{output_dir}/{id}.json"
+                analaysis_data = {
+                    "data": [
+                        {
+                            "possession": {
+                                "team1": match.home.possession,
+                                "team2": match.away.possession
+                            }
+                        },
+                        {
+                            "passes": {
+                                "team1": match.home.passes,
+                                "team2": match.away.passes
+                            }
+                        }
+                    ]
+                }
+                try:
+                    with open(analysis_file_path, 'w') as json_file:
+                        json.dump(analaysis_data, json_file, indent=4)
+                    print(f"Data has been written to '{analysis_file_path}' successfully.")
+                except Exception as e:
+                    print(f"An error occurred while writing to the file: {e}")
 
 
         if crop_basis == 0:
