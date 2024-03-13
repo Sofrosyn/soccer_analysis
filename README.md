@@ -98,3 +98,16 @@ python run.py --possession --model models/ball.pt --video videos/soccer_possessi
 ```
 
 An mp4 video will be generated after the execution. The name is the same as the input video with the suffix `_out` added.
+
+### Run on Docker
+#### Build  Docker Image
+Run the following command to build your Docker image. The -t flag tags your image so it's easier to find later. Replace yourapp with a name for your Docker image:
+
+    docker build -t mysoccer_v2 .
+#### Run Your Flask Applicationized Docker Image
+Run the following command to run your Docker image:
+
+    docker run -p 5000:5000 mysoccer_v2
+
+
+
